@@ -21,34 +21,47 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y build-essential
-
-      - name: Install Python dependencies
+      - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-
-      - name: Install Reflex
-        run: |
           pip install reflex
 
-      - name: Start RaheJadid
+      - name: Start Reflex
         run: |
-          reflex run --env prod
-        env:
-          PYTHONUNBUFFERED: "1"
+          nohup reflex run --env prod > reflex.log 2>&1 &
+          echo $! > reflex.pid
+
+          echo "Reflex started with PID $(cat reflex.pid)"
+          sleep 10
+
+          if ! kill -0 "$(cat reflex.pid)" 2>/dev/null; then
+            echo "Reflex failed to start."
+            cat reflex.log
+            exit 1
+          fi
+
+          echo "Reflex is running."
+
+      - name: Keep runner alive
+        run: |
+          echo "RaheJadid will run for 350 minutes."
+          sleep 21000
+
+      - name: Stop Reflex
+        if: always()
+        run: |
+          if [ -f reflex.pid ]; then
+            kill "$(cat reflex.pid)" 2>/dev/null || true
+          fi
 
       - name: Start next run
         if: always()
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          echo "Current run finished."
-          echo "Starting next run in 5 seconds..."
-          sleep 5
+          echo "Starting next workflow..."
+          sleep 3
           gh workflow run run.yml \
             --repo "${{ github.repository }}" \
             --ref "${{ github.ref_name }}"
